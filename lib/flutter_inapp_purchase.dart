@@ -27,9 +27,6 @@ class FlutterInappPurchase {
   static StreamController<PurchaseResult> _purchaseErrorController;
   static Stream<PurchaseResult> get purchaseError => _purchaseErrorController.stream;
 
-  static StreamController<ConnectionResult> _connectionController;
-  static Stream<ConnectionResult> get connectionUpdated => _connectionController.stream;
-
   static StreamController<String> _purchasePromotedController;
   static Stream<String> get purchasePromoted => _purchasePromotedController.stream;
 
@@ -42,6 +39,9 @@ class FlutterInappPurchase {
 
   static Platform get _platform => instance._pf;
   static http.Client get _client => instance._httpClient;
+
+
+  final connectionChannel = EventChannel("flutter_inapp_connection");
 
   factory FlutterInappPurchase(FlutterInappPurchase _instance) {
     instance = _instance;
@@ -79,15 +79,14 @@ class FlutterInappPurchase {
   ///
   /// Must be called on `Android` before purchasing.
   /// On `iOS` this just checks if the client can make payments.
-  Future<String> get initConnection async {
+  Stream<String> get connection {
+
     if (_platform.isAndroid) {
-      await _setPurchaseListener();
-      final String result = await _channel.invokeMethod('initConnection');
-      return result;
+      _setPurchaseListener();
+      return connectionChannel.receiveBroadcastStream();
     } else if (_platform.isIOS) {
-      await _setPurchaseListener();
-      final String result = await _channel.invokeMethod('canMakePayments');
-      return result;
+      _setPurchaseListener();
+      return Stream.fromFuture(_channel.invokeMethod('canMakePayments'));
     }
     throw PlatformException(
         code: _platform.operatingSystem, message: "platform not supported");
@@ -582,17 +581,13 @@ class FlutterInappPurchase {
     );
   }
 
-  Future<Null> _setPurchaseListener() async {
+  void _setPurchaseListener() async {
     if (_purchaseController == null) {
       _purchaseController = new StreamController.broadcast();
     }
 
     if (_purchaseErrorController == null) {
       _purchaseErrorController = new StreamController.broadcast();
-    }
-
-    if (_connectionController == null) {
-      _connectionController = new StreamController.broadcast();
     }
 
     if (_purchasePromotedController == null) {
@@ -608,10 +603,6 @@ class FlutterInappPurchase {
         case "purchase-error":
           Map<String, dynamic> result = jsonDecode(call.arguments);
           _purchaseErrorController.add(new PurchaseResult.fromJSON(result));
-          break;
-        case "connection-updated":
-          Map<String, dynamic> result = jsonDecode(call.arguments);
-          _connectionController.add(new ConnectionResult.fromJSON(result));
           break;
         case "iap-promoted-product":
           String productId = call.arguments;

@@ -26,6 +26,7 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.FlutterException;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
@@ -33,36 +34,91 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
 
-/** AndroidInappPurchasePlugin */
-public class AndroidInappPurchasePlugin implements MethodCallHandler {
-  public static Registrar reg;
-  static private ArrayList<SkuDetails> skus;
-  private final String TAG = "InappPurchasePlugin";
-  private BillingClient billingClient;
-  private static MethodChannel channel;
+/**
+ * AndroidInappPurchasePlugin
+ */
+public class AndroidInappPurchasePlugin implements MethodCallHandler, EventChannel.StreamHandler {
+    private static List<SkuDetails> skus = new ArrayList<>();
+    private final Activity activity;
+    private final String TAG = "InappPurchasePlugin";
+    private BillingClient billingClient;
+    private MethodChannel channel;
 
-  /** Plugin registration. */
-  public static void registerWith(Registrar registrar) {
-    channel = new MethodChannel(registrar.messenger(), "flutter_inapp");
-    channel.setMethodCallHandler(new FlutterInappPurchasePlugin());
-    reg = registrar;
-    skus = new ArrayList<>();
-  }
-
-  @Override
-  public void onMethodCall(final MethodCall call, final Result result) {
-    if (call.method.equals("getPlatformVersion")) {
-      try {
-        result.success("Android " + android.os.Build.VERSION.RELEASE);
-      } catch(IllegalStateException e){
-        result.error(call.method, e.getMessage(), e.getLocalizedMessage());
-      }
+    public AndroidInappPurchasePlugin(Activity activity) {
+        this.activity = activity;
     }
 
-    /*
+    /**
+     * Plugin registration.
+     */
+    public static void registerWith(Registrar registrar) {
+
+
+        final AndroidInappPurchasePlugin plugin = new AndroidInappPurchasePlugin(registrar.activity());
+
+        EventChannel connectionChannel = new EventChannel(registrar.messenger(), "flutter_inapp_connection");
+        connectionChannel.setStreamHandler(plugin);
+
+        plugin.channel = new MethodChannel(registrar.messenger(), "flutter_inapp");
+        plugin.channel.setMethodCallHandler(new FlutterInappPurchasePlugin());
+
+    }
+
+
+    @Override
+    public void onListen(Object arguments, final EventChannel.EventSink events) {
+        if (billingClient != null) {
+            events.error("ALREADY_STARTED", "disconnect from stream if you want to start over.", null);
+            return;
+        }
+
+        billingClient = BillingClient.newBuilder(activity).setListener(purchasesUpdatedListener)
+                .enablePendingPurchases()
+                .build();
+        billingClient.startConnection(new BillingClientStateListener() {
+            @Override
+            public void onBillingSetupFinished(BillingResult billingResult) {
+                int responseCode = billingResult.getResponseCode();
+
+                if (responseCode == BillingClient.BillingResponseCode.OK) {
+                    events.success("Billing client ready");
+                } else {
+                    events.error("BILLING_CLIENT_CONNECTION_UNSUCCESSFUL", "responseCode: " + responseCode, Integer.toString(responseCode));
+                }
+
+            }
+
+            @Override
+            public void onBillingServiceDisconnected() {
+                events.error("ON_BILLING_SERVICE_DISCONNECTED", "From BillingClient Docs: Called to notify that connection to billing service was lost\n" +
+                        "\n" +
+                        "Note: This does not remove billing service connection itself - this binding to the service will remain active, and you will receive a call to onBillingSetupFinished(BillingResult) when billing service is next running and setup is complete.", null);
+
+            }
+        });
+    }
+
+    @Override
+    public void onCancel(Object arguments) {
+        if (billingClient != null) {
+            billingClient.endConnection();
+            billingClient = null;
+        }
+    }
+
+    @Override
+    public void onMethodCall(final MethodCall call, final Result result) {
+        if (call.method.equals("getPlatformVersion")) {
+            try {
+                result.success("Android " + android.os.Build.VERSION.RELEASE);
+            } catch (IllegalStateException e) {
+                result.error(call.method, e.getMessage(), e.getLocalizedMessage());
+            }
+        }
+        /*
      * initConnection
      */
-    else if (call.method.equals("initConnection")) {
+        /*else if (call.method.equals("initConnection")) {
       if (billingClient != null) {
         result.success("Already started. Call endConnection method if you want to start over.");
         return;
@@ -385,7 +441,7 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler {
 
       builder.setSkuDetails(selectedSku);
       BillingFlowParams flowParams = builder.build();
-      billingClient.launchBillingFlow(reg.activity(), flowParams);
+      billingClient.launchBillingFlow(activity, flowParams);
     }
 
     /*
