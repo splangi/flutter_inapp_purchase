@@ -1,6 +1,8 @@
 package com.dooboolab.flutterinapppurchase;
 
 import androidx.annotation.Nullable;
+
+import android.app.Activity;
 import android.util.Log;
 
 import com.android.billingclient.api.AcknowledgePurchaseParams;
@@ -83,14 +85,14 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler, EventChann
                 if (responseCode == BillingClient.BillingResponseCode.OK) {
                     events.success("Billing client ready");
                 } else {
-                    events.error("BILLING_CLIENT_CONNECTION_UNSUCCESSFUL", "responseCode: " + responseCode, Integer.toString(responseCode));
+                    events.error("BILLING_CLIENT_CONNECTION_UNSUCCESSFUL", "responseCode: " + responseCode, responseCode);
                 }
 
             }
 
             @Override
             public void onBillingServiceDisconnected() {
-                events.error("ON_BILLING_SERVICE_DISCONNECTED", "From BillingClient Docs: Called to notify that connection to billing service was lost\n" +
+                events.error("ON_BILLING_SERVICE_DISCONNECTED", "From BillingClient Docs: Called to notify that connection to billing service was lost" +
                         "\n" +
                         "Note: This does not remove billing service connection itself - this binding to the service will remain active, and you will receive a call to onBillingSetupFinished(BillingResult) when billing service is next running and setup is complete.", null);
 
@@ -585,4 +587,20 @@ public class AndroidInappPurchasePlugin implements MethodCallHandler, EventChann
       }
     }
   };
+}
+
+
+class BillingConnectionHandler implements  EventChannel.StreamHandler {
+
+
+
+  @Override
+  public void onListen(Object arguments, EventChannel.EventSink events) {
+
+  }
+
+  @Override
+  public void onCancel(Object arguments) {
+
+  }
 }

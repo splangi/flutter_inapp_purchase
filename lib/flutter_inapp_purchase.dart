@@ -5,6 +5,7 @@ import 'package:platform/platform.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:flutter/services.dart';
+import 'package:rxdart/rxdart.dart';
 
 import 'utils.dart';
 import 'modules.dart';
@@ -18,17 +19,19 @@ enum _TypeInApp {
 }
 
 class FlutterInappPurchase {
-  static FlutterInappPurchase instance = FlutterInappPurchase(
-    FlutterInappPurchase.private(const LocalPlatform()));
 
-  static StreamController<PurchasedItem> _purchaseController;
-  static Stream<PurchasedItem> get purchaseUpdated => _purchaseController.stream;
+  static BehaviorSubject<FlutterInappPurchase> _connectionSubject;
 
-  static StreamController<PurchaseResult> _purchaseErrorController;
-  static Stream<PurchaseResult> get purchaseError => _purchaseErrorController.stream;
+  static FlutterInappPurchase _instance;
 
-  static StreamController<String> _purchasePromotedController;
-  static Stream<String> get purchasePromoted => _purchasePromotedController.stream;
+  StreamController<PurchasedItem> _purchaseController;
+  Stream<PurchasedItem> get purchaseUpdated => _purchaseController.stream;
+
+  StreamController<PurchaseResult> _purchaseErrorController;
+  Stream<PurchaseResult> get purchaseError => _purchaseErrorController.stream;
+
+  StreamController<String> _purchasePromotedController;
+  Stream<String> get purchasePromoted => _purchasePromotedController.stream;
 
   /// Defining the [MethodChannel] for Flutter_Inapp_Purchase
   static final MethodChannel _channel = const MethodChannel('flutter_inapp');
@@ -41,7 +44,7 @@ class FlutterInappPurchase {
   static http.Client get _client => instance._httpClient;
 
 
-  final connectionChannel = EventChannel("flutter_inapp_connection");
+  static final _connectionChannel = EventChannel("flutter_inapp_connection");
 
   factory FlutterInappPurchase(FlutterInappPurchase _instance) {
     instance = _instance;
@@ -75,21 +78,49 @@ class FlutterInappPurchase {
         code: _platform.operatingSystem, message: "platform not supported");
   }
 
-  /// InitConnection `Android` to purchase items.
-  ///
-  /// Must be called on `Android` before purchasing.
-  /// On `iOS` this just checks if the client can make payments.
-  Stream<String> get connection {
 
+
+  static Stream<FlutterInappPurchase> connect(){
+    if (_instance != null){
+      throw StateError("Already connected!");
+    }
     if (_platform.isAndroid) {
-      _setPurchaseListener();
-      return connectionChannel.receiveBroadcastStream();
+      return _connectionChannel.receiveBroadcastStream().map((_success){
+        if (_instance == null){
+          _instance = FlutterInappPurchase(
+              FlutterInappPurchase.private(const LocalPlatform()));
+        }
+        return _instance;
+      });
     } else if (_platform.isIOS) {
-      _setPurchaseListener();
       return Stream.fromFuture(_channel.invokeMethod('canMakePayments'));
     }
     throw PlatformException(
         code: _platform.operatingSystem, message: "platform not supported");
+  }
+
+  /// InitConnection `Android` to purchase items.
+  ///
+  /// Must be called on `Android` before purchasing.
+  /// On `iOS` this just checks if the client can make payments.
+  static Stream<FlutterInappPurchase> get connection {
+    if (_connectionSubject == null){
+      Stream<FlutterInappPurchase> connectionStream;
+      if (_platform.isAndroid) {
+         connectionStream = chann.receiveBroadcastStream();
+      } else if (_platform.isIOS) {
+        _setPurchaseListener();
+        return Stream.fromFuture(_channel.invokeMethod('canMakePayments'));
+      }
+      throw PlatformException(
+          code: _platform.operatingSystem, message: "platform not supported");
+      _connectionSubject = BehaviorSubject();
+      final connectionChannel =
+      _connectionSubject.addStream()
+    } else{
+      _connectionSubject.
+    }
+
   }
 
   /// Retrieves a list of products from the store on `Android` and `iOS`.
